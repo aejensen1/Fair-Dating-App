@@ -4,7 +4,7 @@ from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import datetime
-from user import User
+from flask_login import LoginManager, login_user, current_user, UserMixin
 from dotenv import load_dotenv
 import os
 
@@ -13,6 +13,7 @@ load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 app.config['MONGO_URI'] = 'mongodb://localhost:27017/mydatabase'
+login_manager = LoginManager(app)
 
 # Connect to MongoDB
 client = MongoClient('localhost', 27017)
@@ -24,6 +25,14 @@ messages = db["Messages"]
 profiles = db["Profiles"]
 block = db["Block"]
 
+class User(UserMixin):
+    def __init__(self, username, password):
+        self.username = username
+        self.password_hash = generate_password_hash(password)
+        pass
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
 def test_functions():
     db.activity_log.insert_one({"key": "value"})
@@ -35,9 +44,13 @@ def test_functions():
     #db["Activity Log"].delete_one({"key": "value"})
     return "Test completed successfully."
 
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get_by_id(user_id)
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', current_user=current_user)
 
 @app.route('/test_mongodb_functions')
 def test_mongodb_functions():
