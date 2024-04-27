@@ -4,7 +4,7 @@ from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import datetime
-from flask_login import LoginManager, login_user, current_user, UserMixin
+from flask_login import LoginManager, login_user, current_user, UserMixin, login_required
 from dotenv import load_dotenv
 import os
 from bson import ObjectId
@@ -74,6 +74,7 @@ def settings():
     return render_template('settings.html')
 
 @app.route('/home')
+@login_required
 def home():
     # Render the home page template or perform necessary actions
     return render_template('home.html')
@@ -101,9 +102,12 @@ def register():
         # Hash the password before storing it
         password_hash = generate_password_hash(password)
 
-        # Create the user and add to the database
-        users.insert_one({'username': username, 'password': password_hash})
-        user = User(id=str(users['_id']), username=username, password_hash=password_hash)
+        # Insert the user document and get the inserted ID
+        result = users.insert_one({'username': username, 'password': password_hash})
+        user_id = str(result.inserted_id)
+
+        # Create the user object with the correct ID
+        user = User(id=user_id, username=username, password_hash=password_hash)
         
         # Automatically log in the user after registration
         login_user(user)
