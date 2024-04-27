@@ -1,5 +1,5 @@
 # app.py for dating app
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
@@ -7,6 +7,8 @@ import datetime
 from flask_login import LoginManager, login_user, current_user, UserMixin
 from dotenv import load_dotenv
 import os
+from bson import ObjectId
+from bson.errors import InvalidId
 
 load_dotenv()
 
@@ -26,37 +28,42 @@ profiles = db["Profiles"]
 block = db["Block"]
 
 class User(UserMixin):
-    def __init__(self, username, password):
+    def __init__(self, id, username, password_hash):
+        self.id = id # Use MongoDB's _id field as the id attribute
         self.username = username
-        self.password_hash = generate_password_hash(password)
+        self.password_hash = password_hash
         pass
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
-def test_functions():
-    db.activity_log.insert_one({"key": "value"})
-    # Test get
-    #document = db["Activity Log"].find_one({"key": "value"})
-    # Test add
-    #db["Activity Log"].update_one({"key": "value"}, {"$set": {"key2": "value2"}})
-    # Test remove
-    #db["Activity Log"].delete_one({"key": "value"})
-    return "Test completed successfully."
-
 @login_manager.user_loader
 def load_user(user_id):
-    return User.get_by_id(user_id)
+    try:
+        # Attempt to convert user_id to ObjectId
+        user_obj_id = ObjectId(user_id)
+    except InvalidId:
+        # If user_id cannot be converted to ObjectId, return None
+        return None
+    
+    # Query the user from the database
+    user_data = db.users.find_one({'_id': user_obj_id})
+    if user_data:
+        return User(id=str(user_data['_id']), username=user_data['username'], password_hash=user_data['password_hash'])
+    else:
+        return None
 
 @app.route('/')
 def index():
-    return render_template('index.html', current_user=current_user)
+    return render_template('login.html', current_user=current_user)
 
-@app.route('/test_mongodb_functions')
+@app.route('/test_mongodb_functions', methods=['GET', 'POST'])
 def test_mongodb_functions():
-    # Implement test functions here
-    result = test_functions()
-    return result
+    if request.method == 'POST':
+        activity_log.insert_one({"key": "value"})
+        return "Test completed successfully."
+    else:
+        return render_template('index2.html')
 
 @app.route("/edit-profile")
 def edit_profile():
@@ -66,40 +73,70 @@ def edit_profile():
 def settings():
     return render_template('settings.html')
 
-@app.route('/register', methods=['POST'])
-def register():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    
-    if not username or not password:
-        return jsonify({'message': 'Missing username or password'}), 400
-    
-    if db.users.find_one({'username': username}):
-        return jsonify({'message': 'User already exists'}), 400
-    
-    user = User(username, password)
-    db.users.insert_one({'username': user.username, 'password': user.password})
-    
-    return jsonify({'message': 'User created successfully'}), 201
+@app.route('/home')
+def home():
+    # Render the home page template or perform necessary actions
+    return render_template('home.html')
 
-@app.route('/login', methods=['POST'])
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        if request.headers['Content-Type'] == 'application/json':
+            data = request.json
+            username = data.get('username')
+            password = data.get('password')
+        else:
+            # If the content type is not JSON, assume form data
+            username = request.form.get('username')
+            password = request.form.get('password')
+        
+        # Check if username or password is missing
+        if not username or not password:
+            return jsonify({'message': 'Missing username or password'}), 400
+
+        # Check if username already exists
+        if users.find_one({'username': username}):
+            return jsonify({'message': 'Username already exists'}), 400
+
+        # Hash the password before storing it
+        password_hash = generate_password_hash(password)
+
+        # Create the user and add to the database
+        users.insert_one({'username': username, 'password': password_hash})
+        user = User(id=str(users['_id']), username=username, password_hash=password_hash)
+        
+        # Automatically log in the user after registration
+        login_user(user)
+
+        return redirect(url_for('home'))
+    else:
+        return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    
-    if not username or not password:
-        return jsonify({'message': 'Missing username or password'}), 400
-    
-    user = db.users.find_one({'username': username})
-    
-    if not user or not check_password_hash(user['password'], password):
-        return jsonify({'message': 'Invalid username or password'}), 401
-    
-    token = jwt.encode({'username': username, 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)}, app.config['SECRET_KEY'])
-    
-    return jsonify({'token': token.decode('UTF-8')}), 200
+    if request.method == 'POST':
+        if request.headers['Content-Type'] == 'application/json':
+            data = request.json
+            username = data.get('username')
+            password = data.get('password')
+        else:
+            # If the content type is not JSON, assume form data
+            username = request.form.get('username')
+            password = request.form.get('password')
+        
+        if not username or not password:
+            return jsonify({'message': 'Missing username or password'}), 400
+        
+        user = users.find_one({'username': username})
+        
+        if not user or not check_password_hash(user['password'], password):
+            return jsonify({'message': 'Invalid username or password'}), 401
+        
+        token = jwt.encode({'username': username, 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)}, app.config['SECRET_KEY'])
+        
+        return redirect(url_for('home'))
+    else:
+        return render_template('login.html')
 
 # Example protected route
 @app.route('/protected', methods=['GET'])
