@@ -8,6 +8,7 @@ import os
 from bson import ObjectId
 from bson.errors import InvalidId
 from functools import wraps
+import base64
 
 load_dotenv()
 
@@ -86,9 +87,48 @@ def test_mongodb_functions():
     else:
         return render_template('index2.html')
 
-@app.route("/edit-profile")
+from flask import jsonify, render_template
+
+@app.route("/edit-profile", methods=['GET', 'POST'])
 def edit_profile():
-    return render_template('edit-profile.html')
+    if request.method == 'POST':
+        profile_image = request.files.get('image_upload')
+        birthday = request.form.get('birthday')
+        gender = request.form.get('gender')
+        interests = request.form.get('interests')
+        bio = request.form.get('bio')
+        if profile_image and birthday and gender and interests and bio:
+            # Read the uploaded file as binary data
+            profile_image_data = profile_image.read()
+            # Encode the binary data as base64
+            profile_image_base64 = base64.b64encode(profile_image_data).decode('utf-8')
+            # Update user profile in MongoDB
+            update_data = {
+                'profile_image': profile_image_base64,
+                'birthday': birthday,
+                'gender': gender,
+                'interests': interests,
+                'bio': bio,
+                'profile_complete': True
+            }
+            # Update user profile in MongoDB
+            users.update_one({'_id': ObjectId(current_user.get_id())}, {'$set': update_data})
+            return redirect(url_for('home'))
+        else:
+            return jsonify({'message': 'Missing required fields'}), 400
+    else:
+        user_data = users.find_one({'_id': ObjectId(current_user.get_id())})
+        if user_data:
+            username = user_data.get('username', '')
+            profile_image = user_data.get('profile_image', '')
+            birthday = user_data.get('birthday', '')
+            gender = user_data.get('gender', '')
+            interests = user_data.get('interests', '')
+            bio = user_data.get('bio', '')
+            profile_complete = user_data.get('profile_complete', '')
+            return render_template('edit-profile.html', username=username, profile_image=profile_image, birthday=birthday, gender=gender, interests=interests, bio=bio, profile_complete=profile_complete)
+        else:
+            return jsonify({'message': 'User data not found'}), 404
 
 @app.route("/settings")
 def settings():
