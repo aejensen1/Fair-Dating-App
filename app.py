@@ -2,8 +2,6 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
-import jwt
-import datetime
 from flask_login import LoginManager, login_user, current_user, UserMixin, login_required, logout_user
 from dotenv import load_dotenv
 import os
@@ -36,6 +34,19 @@ def logout_if_authenticated(f):
             logout_user()  # Log out the user
         return f(*args, **kwargs)
     return decorated_function
+
+def login_required(func):
+    @wraps(func)
+    def decorated_view(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        return func(*args, **kwargs)
+    return decorated_view
+
+@app.before_request
+def before_request():
+    if not current_user.is_authenticated and request.endpoint and request.endpoint != 'login' and request.endpoint != 'register':
+        return redirect(url_for('login'))
 
 class User(UserMixin):
     def __init__(self, id, username, password_hash):
@@ -86,10 +97,15 @@ def settings():
 @app.route('/home')
 @login_required
 def home():
+    user_data = users.find_one({'_id': ObjectId(current_user.get_id())})
+    username = user_data['username']
+    profile_complete = user_data['profile_complete']
+
     # Render the home page template or perform necessary actions
-    return render_template('home.html')
+    return render_template('home.html', username=username, profile_complete=profile_complete)
 
 @app.route('/register', methods=['GET', 'POST'])
+@logout_if_authenticated
 def register():
     if request.method == 'POST':
         if request.headers['Content-Type'] == 'application/json':
@@ -116,7 +132,7 @@ def register():
         user_id = ObjectId()
 
         # Insert the user document and get the inserted ID
-        result = users.insert_one({'_id': user_id, 'username': username, 'password': password_hash})
+        result = users.insert_one({'_id': user_id, 'username': username, 'password': password_hash, 'profile_complete': False})
         
         # Create the user object with the correct ID
         user = User(id=user_id, username=username, password_hash=password_hash)
@@ -154,9 +170,7 @@ def login():
         
         # Log in the user
         login_user(user)
-
-        token = jwt.encode({'username': username, 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)}, app.config['SECRET_KEY'])
-        
+          
         return redirect(url_for('home'))
     else:
         return render_template('login.html')
@@ -167,24 +181,6 @@ def logout():
     logout_user()
     # Log out the user
     return redirect(url_for('login'))
-
-# Example protected route
-@app.route('/protected', methods=['GET'])
-def protected():
-    token = request.headers.get('Authorization')
-    
-    if not token:
-        return jsonify({'message': 'Token is missing'}), 401
-    
-    try:
-        payload = jwt.decode(token, app.config['SECRET_KEY'])
-        username = payload['username']
-    except jwt.ExpiredSignatureError:
-        return jsonify({'message': 'Token has expired'}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({'message': 'Invalid token'}), 401
-    
-    return jsonify({'message': f'Welcome, {username}!'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)
