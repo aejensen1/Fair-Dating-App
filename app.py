@@ -4,7 +4,7 @@ from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import datetime
-from flask_login import LoginManager, login_user, current_user, UserMixin, login_required
+from flask_login import LoginManager, login_user, current_user, UserMixin, login_required, logout_user
 from dotenv import load_dotenv
 import os
 from bson import ObjectId
@@ -32,7 +32,7 @@ class User(UserMixin):
         self.id = id # Use MongoDB's _id field as the id attribute
         self.username = username
         self.password_hash = password_hash
-        pass
+
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
@@ -47,9 +47,9 @@ def load_user(user_id):
         return None
     
     # Query the user from the database
-    user_data = db.users.find_one({'_id': user_obj_id})
-    if user_data:
-        return User(id=str(user_data['_id']), username=user_data['username'], password_hash=user_data['password_hash'])
+    user_data = users.find_one({'_id': user_obj_id})
+    if user_data:        
+        return User(id=str(user_data['_id']), username=user_data['username'], password_hash=user_data['password'])
     else:
         return None
 
@@ -102,10 +102,12 @@ def register():
         # Hash the password before storing it
         password_hash = generate_password_hash(password)
 
-        # Insert the user document and get the inserted ID
-        result = users.insert_one({'username': username, 'password': password_hash})
-        user_id = str(result.inserted_id)
+        # Generate an ObjectId for the user ID
+        user_id = ObjectId()
 
+        # Insert the user document and get the inserted ID
+        result = users.insert_one({'_id': user_id, 'username': username, 'password': password_hash})
+        
         # Create the user object with the correct ID
         user = User(id=user_id, username=username, password_hash=password_hash)
         
@@ -131,16 +133,29 @@ def login():
         if not username or not password:
             return jsonify({'message': 'Missing username or password'}), 400
         
-        user = users.find_one({'username': username})
+        user_data = users.find_one({'username': username})
         
-        if not user or not check_password_hash(user['password'], password):
+        if not user_data or not check_password_hash(user_data['password'], password):
             return jsonify({'message': 'Invalid username or password'}), 401
         
+        # Create a user instance from the retrieved user data
+        user = User(id=user_data['_id'], username=user_data['username'], password_hash=user_data['password'])
+        
+        # Log in the user
+        login_user(user)
+
         token = jwt.encode({'username': username, 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)}, app.config['SECRET_KEY'])
         
         return redirect(url_for('home'))
     else:
         return render_template('login.html')
+
+@app.route('/logout', methods=['GET'])
+@login_required
+def logout():
+    logout_user()
+    # Log out the user
+    return redirect(url_for('login'))
 
 # Example protected route
 @app.route('/protected', methods=['GET'])
