@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import os
 from bson import ObjectId
 from bson.errors import InvalidId
+from functools import wraps
 
 load_dotenv()
 
@@ -26,6 +27,15 @@ matches = db["Matches"]
 messages = db["Messages"]
 profiles = db["Profiles"]
 block = db["Block"]
+
+# Define a decorator to check if the user is authenticated
+def logout_if_authenticated(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if current_user.is_authenticated:
+            logout_user()  # Log out the user
+        return f(*args, **kwargs)
+    return decorated_function
 
 class User(UserMixin):
     def __init__(self, id, username, password_hash):
@@ -119,6 +129,7 @@ def register():
         return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
+@logout_if_authenticated
 def login():
     if request.method == 'POST':
         if request.headers['Content-Type'] == 'application/json':
