@@ -45,16 +45,31 @@
 
     <section class="hero">
         <div class="hero-content">
-            <h2>Find Your Perfect Match {{ username }}!</h2>
-            {% if not profile_complete %}
+            <h2>Find Your Perfect Match {{ user_data.username }}!</h2>
+            {% if not user_data.profile_complete %}
             <p>Complete your profile to start matching with other singles.</p>
             <a href="/edit-profile" class="btn btn-primary">Edit Profile</a>
         </div>
     </section>
             {% else %}
             <p>Join thousands of singles who trust our dating platform to find love.</p>
-            <a href="#" class="btn btn-primary">Sign Up Now</a>
-        </div>
+            </div>
+    </section>
+    <section class="profiles">
+        {% if random_profile %}
+            <div>
+                <h2>{{ random_profile.username }}</h2>
+                <img src="data:image/jpeg;base64,{{ random_profile.profile_image }}" alt="Profile Image" class="img-thumbnail" style="max-width: 200px;">
+                <p>Bio: {{ random_profile.bio }}</p>
+                <p>Birthday: {{ random_profile.birthday }}</p>
+                <p>Gender: {{ random_profile.gender }}</p>
+                <p>Interests: {{ random_profile.interests }}</p>
+                <!-- You can add more profile attributes here -->
+            </div>
+        {% else %}
+            <p>No profiles found.</p>
+        {% endif %}
+
     </section>
 
     <section class="features">

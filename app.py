@@ -9,6 +9,8 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from functools import wraps
 import base64
+from datetime import datetime, timedelta
+import random
 
 load_dotenv()
 
@@ -94,6 +96,10 @@ def edit_profile():
     if request.method == 'POST':
         profile_image = request.files.get('image_upload')
         birthday = request.form.get('birthday')
+        birthdate_formatted = datetime.strptime(birthday, '%Y-%m-%d')
+        age = datetime.now() - birthdate_formatted
+        if age < timedelta(days=365 * 18):
+            return jsonify({'error': 'You must be 18 years or older to register.'}), 400
         gender = request.form.get('gender')
         interests = request.form.get('interests')
         bio = request.form.get('bio')
@@ -139,10 +145,31 @@ def settings():
 def home():
     user_data = users.find_one({'_id': ObjectId(current_user.get_id())})
     username = user_data['username']
+    id = user_data['_id']
     profile_complete = user_data['profile_complete']
 
-    # Render the home page template or perform necessary actions
-    return render_template('home.html', username=username, profile_complete=profile_complete)
+    # If the current user's profile is complete, find a random profile that is not theirs and has profile_complete set to true
+    if (profile_complete):
+        # Query the database to find a random profile
+        # Use aggregate with $match and $sample stages to select a random document
+        random_profile = users.aggregate([
+            {'$match': {'username': {'$ne': username}, 'profile_complete': True}},
+            {'$sample': {'size': 1}},
+            {'$skip': 0}  # Skip the randomly selected number of documents
+        ])
+
+        # Extract the random profile from the cursor
+        random_profile = list(random_profile)
+
+        # If any random profile found, select the first one
+        if random_profile:
+            random_profile = random_profile[0]
+        if random_profile:
+            # Pass the random profile data to the home page template
+            return render_template('home.html', user_data=user_data, random_profile=random_profile)
+
+    # If no suitable random profile is found or the current user's profile is not complete, render the home page without showing any random profile
+    return render_template('home.html', user_data=user_data)
 
 @app.route('/register', methods=['GET', 'POST'])
 @logout_if_authenticated
