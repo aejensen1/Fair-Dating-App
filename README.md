@@ -10,4 +10,4 @@ In the edit-profile route, the user must enter all required fields, including an
 
 Now the user can see other users on the home page. Random user profiles that are complete will show every time the page is refreshed. The backend will skip a random number of users that have their profile marked as complete and then forward that data to the html template to be displayed.
 
-All in all, this program demonstrates knowledge in how to create, add to, update, and get information from a database. I plan to use these concepts to make a new version of this data app using React Native, so that the app itself is more versatile and scaleable. It can then be pushed to mobile applications.
+All in all, this program demonstrates knowledge in how to create, add to, update, and get information from a database. I plan to use these concepts to make a new version of this data app using React Native, so that the app itself is more versatile and scalable. It can then be pushed to mobile applications.
